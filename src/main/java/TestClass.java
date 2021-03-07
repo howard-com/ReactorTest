@@ -6,6 +6,7 @@ import java.util.Random;
 import java.util.Scanner;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
 import reactor.core.publisher.Flux;
@@ -238,32 +239,6 @@ public class TestClass {
 		System.out.println("");
 	}
 
-	public void test10() {
-		TSEntity[] entityList = new TSEntity[10];
-		for (int i = 1; i <= 10; i++) {
-			TSEntity t = new TSEntity();
-			t.id = "id=" + i;
-			t.name = "name=" + i;
-		}
-
-		Mono<TSEntity[]> res = Mono.just(entityList);
-		res.map(entityArray -> {
-			System.out.println("11111111111111111");
-			Flux<TSEntity> entity = Flux.fromArray(entityArray);
-			return entity;
-		})
-		.map(t -> {
-			t.map(entity -> {
-				System.out.println("222222" + entity.name);
-				return t;
-			});
-			return null;
-		})
-		.subscribe();
-
-		fakeLoad(1000);
-	}
-
 	// 测试sort
 	public void test9() {
 
@@ -298,6 +273,59 @@ public class TestClass {
 
 		fakeLoad(100);
 		return;
+	}
+
+	public void test10() {
+		// 创建一颗含有100个苹果的苹果树
+		Tree appleTree = new Tree("Tree-1");
+
+		Apple[] freshApples = new Apple[100];
+		for (int i = 1; i <= 100; i++) {
+			freshApples[i - 1] = new Apple(appleTree.name + "-" + "Apple-" + i);
+		}
+		appleTree.apples = freshApples;
+
+		AtomicLong countJ = new AtomicLong(); // 为了给果汁编号设置一个计数器
+		
+		// 流水线开始
+		Mono.just(appleTree).flatMapIterable(t -> {
+			// 1.将果树上的苹果取出，每个苹果进行下一步操作。
+			System.out.println("从果树{" + appleTree.name + "}上摘到" + t.apples.length + "颗苹果");
+			return Arrays.asList(t.apples);
+		}).map(a -> {
+			// 2.每个苹果都变成一份果汁，然后进行下一步操作。
+			System.out.println("生成一份苹果汁{" + a.name + "-Juice" + (countJ.get() + 1) + "}");
+			return new Juice(a.name + "-Juice" + countJ.incrementAndGet());
+		}).buffer(3).flatMap(juiceList -> {
+			// 3.每三份果汁装成一瓶饮料，然后进行下一步操作。不足三份的部分舍去。
+			if (juiceList.size() < 3) {
+				//throw new IllegalStateException("xxx");
+				System.out.println("剩余" + juiceList.size() + "份饮料，无法装满一瓶。");
+				return Mono.empty();
+			}
+
+			StringBuffer drinkName = new StringBuffer();
+			Drink drink = null;
+			for (Juice juice : juiceList) {
+				if (drinkName.length() > 0)
+					drinkName.append("+++");
+				drinkName.append(juice.name);
+			}
+			if (drinkName.length() > 0) {
+				drink = new Drink(drinkName.toString());
+				System.out.println("灌装一瓶饮料{" + drink.name + "}");
+			}
+			
+			return Mono.just(drink); // 生成一瓶饮料。
+		}).collectList() // 将瓶装饮料全部收集起来一起处理
+		// 4.将瓶装饮料装箱
+		.map(drinks -> new Product("苹果汁产品批次", drinks.toArray(new Drink[drinks.size()]))) 
+		.subscribe(p -> {
+			System.out.println("饮料生产完毕！");
+			System.out.println("得到饮料" + p.drinkList.length + "瓶");
+		}, error -> {
+			System.err.println("CAUGHT " + error);
+		});
 	}
 
 	// 测试各种过年不同写法
@@ -364,4 +392,48 @@ class Teacher {
 class TSEntity {
 	public String id;
 	public String name;
+}
+
+//-----------------Drink process--------------------
+class Tree {
+	Apple[] apples;
+	String name;
+
+	public Tree(String name) {
+		this.name = name;
+	}
+}
+
+class Apple {
+	String name;
+
+	public Apple(String name) {
+		this.name = name;
+	}
+}
+
+class Juice {
+	String name;
+
+	public Juice(String name) {
+		this.name = name;
+	}
+}
+
+class Drink {
+	String name;
+
+	public Drink(String name) {
+		this.name = name;
+	}
+}
+
+class Product {
+	String name;
+	Drink[] drinkList;
+
+	public Product(String name, Drink[] drinks) {
+		this.name = name;
+		this.drinkList = drinks;
+	}
 }
