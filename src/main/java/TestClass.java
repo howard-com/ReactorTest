@@ -69,21 +69,24 @@ public class TestClass {
 		return "这是一个新的字符串";
 	}
 
-	private String getThreadName() {
-		return Thread.currentThread().getStackTrace().getClass().getName();
-	}
-
 	// 测试Flux create方法调用的时机
 	public void test3() {
 		Flux<String> flux = Flux.create(v -> {
 			System.out.println("开始创建数据");
+//			System.out.println("当前线程-" + getThreadName());
+			//fakeLoad(2000);
 			v.next("aaa");
 			v.next("bbb");
 			v.next("ccc");
 			v.complete();
 		});
 		System.out.println("Flux对象创建完成");
-		flux.subscribe(System.out::println);
+//		System.out.println("当前线程-" + getThreadName());
+		flux.subscribe(System.out::println); //Mono Flux 都是懒加载的。 只有消费的时候才会调用。
+	}
+	
+	private String getThreadName() {
+		return Thread.currentThread().getName();
 	}
 
 	// 测试异步的创建以及消费数据
@@ -137,10 +140,10 @@ public class TestClass {
 				v.next("对象" + i);
 			}
 			v.complete();
-		}).parallel(10).runOn(Schedulers.parallel()).subscribe(res -> {
-			System.out.println(res + " " + Thread.currentThread().getName());
+		}).parallel(10).runOn(Schedulers.parallel()).subscribe(res -> {	 
+			System.out.println(res + " " + getThreadName()); //actually max parallel lines is 8
 		});
-		this.fakeLoad(1000);
+		this.fakeLoad(1000); // 由于采用了并发执行的方式。必须主动等待消费方法执行完。
 	}
 
 	// 测试Mono对象来进行流水线工作
@@ -169,7 +172,7 @@ public class TestClass {
 
 	private Mono<String> say(String name) {
 		return Mono.just(name)
-				// .publishOn(Schedulers.parallel())
+//				 .publishOn(Schedulers.parallel())	// 调用Mono的内置方法，告诉框架用新的线程来执行后续方法。
 				.map(t -> {
 					try {
 						return hello(t);
@@ -188,6 +191,7 @@ public class TestClass {
 		return result;
 	}
 
+	// 测试各种操作方法
 	public void test8() {
 		String[] input = { "1234", "5678" };
 
@@ -241,7 +245,6 @@ public class TestClass {
 
 	// 测试sort
 	public void test9() {
-
 		Student st1 = new Student("张三", 90);
 		Student st2 = new Student("李四", 91);
 		Student st3 = new Student("王二", 87);
@@ -275,6 +278,7 @@ public class TestClass {
 		return;
 	}
 
+	// 演示从苹果树到果汁的流水线过程
 	public void test10() {
 		// 创建一颗含有100个苹果的苹果树
 		Tree appleTree = new Tree("Tree-1");
