@@ -58,9 +58,10 @@ public class TestClass {
 		System.out.println("Mono创建方式:");
 		Mono<String> res2 = Mono.fromSupplier(() -> createNewStr());
 		System.out.println("Mono创建方式完成！");
-		res2.subscribeOn(Schedulers.parallel()).subscribe(v -> System.out.println("Mono方式结果是:" + v));
-		this.fakeLoad(6000);
-		; // 故意等一下确保订阅方法被执行
+		res2.subscribe(v -> System.out.println("Mono方式结果是:" + v));
+		
+//		res2.subscribeOn(Schedulers.parallel()).subscribe(v -> System.out.println("Mono方式结果是:" + v));
+//		this.fakeLoad(6000); // 故意等一下确保订阅方法被执行
 	}
 
 	public String createNewStr() {
@@ -74,7 +75,7 @@ public class TestClass {
 		Flux<String> flux = Flux.create(v -> {
 			System.out.println("开始创建数据");
 //			System.out.println("当前线程-" + getThreadName());
-			//fakeLoad(2000);
+//			fakeLoad(2000);
 			v.next("aaa");
 			v.next("bbb");
 			v.next("ccc");
@@ -303,11 +304,14 @@ public class TestClass {
 		}).buffer(3).flatMap(juiceList -> {
 			// 3.每三份果汁装成一瓶饮料，然后进行下一步操作。不足三份的部分舍去。
 			if (juiceList.size() < 3) {
-				//throw new IllegalStateException("xxx");
 				System.out.println("剩余" + juiceList.size() + "份饮料，无法装满一瓶。");
+				//throw new IllegalStateException("果汁数量不足，无法灌装成饮料。");
 				return Mono.empty();
+				/* 如果是map方法的话就需要返回Drink类型的对象。但是此处只能返回null从而导致异常。会导致异常。
+				 * 因此map方法的情况下此时只能返回异常。然后再后面skip这个异常并继续后面的流程。不过这么写代码会显得非常复杂。
+				 * 综合考虑此时还是调用flatMap并返回一个空序列更好。flatMap会自动处理空序列。这样代码可读性更好。
+				 */
 			}
-
 			StringBuffer drinkName = new StringBuffer();
 			Drink drink = null;
 			for (Juice juice : juiceList) {
@@ -322,8 +326,9 @@ public class TestClass {
 			
 			return Mono.just(drink); // 生成一瓶饮料。
 		}).collectList() // 将瓶装饮料全部收集起来一起处理
+		//.onErrorContinue((err, val) -> System.out.println(err.getMessage())) // 如果用抛异常的方式处理剩余果汁，需要在此catch
 		// 4.将瓶装饮料装箱
-		.map(drinks -> new Product("苹果汁产品批次", drinks.toArray(new Drink[drinks.size()]))) 
+		.map(drinks -> new Product("苹果汁产品", drinks.toArray(new Drink[drinks.size()]))) 
 		.subscribe(p -> {
 			System.out.println("饮料生产完毕！");
 			System.out.println("得到饮料" + p.drinkList.length + "瓶");
